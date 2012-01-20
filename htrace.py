@@ -185,7 +185,7 @@ class ProgramBuildData:
         for lib in libs:
             found = False
             for libdir in self.libdirs:
-                f = os.path.join(libdir, 'lib'+lib+'.dylib')
+                f = os.path.join(libdir, self.dylib(lib))
                 if os.path.exists(f):
                     libpaths.append(f)
                     found = True
@@ -193,6 +193,33 @@ class ProgramBuildData:
             if not found:
                 Log.warn("Cannot find library file for: "+lib)
         return libpaths
+
+    def ex_libfiles(self):
+        """Find the full path to external (non-haskell) libraries needed.
+
+        This is done by searching for the library in standard locations
+        """
+        search_paths = ['/usr/lib', '/usr/lib64', '/usr/local/lib']
+        libpaths = []
+        for lib in self.ex_libs:
+            for libdir in search_paths:
+                f = os.path.join(libdir, self.dylib(lib))
+                if os.path.exists(f):
+                    libpaths.append(f)
+                    break
+            else:
+                Log.warn("Cannot find library file for: "+lib)
+        return libpaths
+
+
+    @property
+    def ex_libs(self):
+        """Returns the list of external (non-haskell) libraries needed"""
+        return [lib for lib in self.libs if not lib.startswith('HS')]
+
+    def dylib(self, lib):
+       """Form dynamic library name with proper extension and lib prefix"""
+       return 'lib'+lib+'.dylib'
 
     def __repr__(self):
         return "ProgramBuildData("+",".join([repr(self.target),
@@ -391,7 +418,11 @@ class Init(Mode):
 
         # Parse output to get build data
         build_data = ProgramBuildData.from_ghc_output(res.stderr, res.stdout)
+        if args.extra_libs:
+            build_data.libs.extend(args.extra_libs.split())
         Log.debug("BD: "+str(build_data))
+
+        # Create output directory if needed
         if not os.path.exists(args.output):
             Log.prep("Creating output directory %s", args.output)
             os.mkdir(args.output)
@@ -520,8 +551,11 @@ class Makefile(Mode):
         header("Libraries")
         outh.write("LIBDIRS   := "+":".join(build_data.libdirs)+"\n\n")
         outh.write("HSLIBS    := "+":".join(build_data.hs_libfiles()) + "\n\n")
+        outh.write("EXLIBS    := "+":".join(build_data.ex_libfiles()) + "\n\n")
         outh.write("LLI_ENV   := DYLD_LIBRARY_PATH=$(LIBDIRS) "
-                               +"DYLD_INSERT_LIBRARIES=$(HSLIBS)\n")
+                               +"DYLD_INSERT_LIBRARIES=$(HSLIBS):$(EXLIBS)\n")
+        outh.write("GHC_L_LIBS := "+' '.join(['-l'+lib for lib in build_data.ex_libs])
+                   +'\n')
         outh.write('\n')
 
         header("LL Files")
@@ -604,7 +638,7 @@ class Makefile(Mode):
         outh.write("\n")
 
         outh.write(m_trace+": "+m_traced_opt_s+"\n")
-        outh.write("\t$(GHC) -no-hs-main $(HS_PACKAGES) $< -o $@\n")
+        outh.write("\t$(GHC) -no-hs-main $(HS_PACKAGES) $(GHC_L_LIBS) $< -o $@\n")
         outh.write("\n")
 
         header("Run Trace")
@@ -654,6 +688,8 @@ def parse_args(args):
                              help='arguments passed to cabal configure')
     parser_prep.add_argument('--build-args', metavar="ARGS", default= '',
                              help='arguments passed to cabal build')
+    parser_prep.add_argument('--extra-libs', metavar="LIBS",
+                             help='extra libraries to link against')
     parser_prep.set_defaults(mode=Init)
 
     parser_makefile = subparsers.add_parser(Makefile().name,
