@@ -13,7 +13,7 @@ from collections import OrderedDict
 DEFAULT_GHC='/Users/dave/Research/git/ghc-trace/inplace/bin/ghc-stage2'
 
 class Log:
-    FORMAT="[{name}] {message}"
+    FORMAT="[HTRACE][{name}] {message}"
     log = logging.getLogger()
     @staticmethod
     def init(opts):
@@ -28,7 +28,7 @@ class Log:
 
     @staticmethod
     def info(msg, *args):
-        logging.getLogger('HTRACE').info(msg, *args)    
+        logging.getLogger('INFO').info(msg, *args)
 
     @staticmethod
     def warn(msg, *args):
@@ -78,6 +78,10 @@ class LLVM:
         self.opt = dict['opt']
         self.llvm_prof = dict['llvm-prof']
         self.llvm_link = dict['llvm-link']
+
+class ModeError(Exception):
+    def __init__(self, msg):
+        super(ModeError, self).__init__(msg)
 
 class CommandError(Exception):
     def __init__(self, command, retcode, stdout, stderr):
@@ -154,7 +158,7 @@ class ProgramBuildData:
 
     def bitcode_dir(self):
         """Directory for storing local bitcode files"""
-        return "htrace"
+        return "bitcode"
     
     def local_name(self, ll):
         """Get the local path for an llvm file.
@@ -255,19 +259,65 @@ class ProgramBuildData:
                             packages.append(p)
             return packages
                     
+        def replace_extension(s, ext):
+            ext_pos = s.rfind('.') + 1
+            return s[:ext_pos] + ext
         
         # Loop through GHC output    
-        on_linker_line = False
+        on_linker_line   = False
+        on_literate_line = False
+        on_cpp_line      = False
+        literate_map = {}
+        cpp_map = {}
         for line in out.readlines():
             if on_linker_line:
-                target = parse_link_line(line)
                 on_linker_line = False
+                target = parse_link_line(line)
+                continue
+            if on_literate_line:
+                on_literate_line = False
+                lhs_file = line.split()[-2].strip("'")
+                tmp_file = line.split()[-1].strip("'")
+                literate_map[tmp_file] = replace_extension(lhs_file, 'll')
+                Log.debug('Adding literate map entry %s => %s',
+                          tmp_file, literate_map[tmp_file])
+                continue
+            if on_cpp_line:
+                on_cpp_line = False
+                hs_file = line.split()[-3].strip("'")
+                tmp_file = line.split()[-1].strip("'")
+
+                # Check to see if the file to be pre-processed is coming from an
+                # unlitted source file. If so map back to the original source file
+                if hs_file in literate_map:
+                    Log.debug('Found unlitted hs file for cpp: %s', hs_file)
+                    hs_file = literate_map[hs_file]
+
+                cpp_map[tmp_file] = replace_extension(hs_file, 'll')
+                Log.debug('Adding cpp map entry %s => %s',
+                          tmp_file, cpp_map[tmp_file])
+                continue
+
             if line.startswith('compile: input file '):
+                ll_file = None
                 hs_file = line[len('compile: input file '):].rstrip()
-                ll_file = hs_file[0:-2] + 'll'
-                llvm_files.append(ll_file)
+                if hs_file in literate_map:
+                    ll_file = literate_map[hs_file]
+                elif hs_file in cpp_map:
+                    ll_file = cpp_map[hs_file]
+                elif hs_file.endswith('-boot'):
+                    Log.debug('Skipping hs-boot file: %s', hs_file)
+                else:
+                    ll_file = replace_extension(hs_file, 'll')
+
+                if ll_file:
+                    llvm_files.append(ll_file)
             elif line.startswith('*** Linker:'):
                 on_linker_line = True
+            elif line.startswith('*** Literate pre-processor:'):
+                on_literate_line = True
+            elif line.startswith('*** C pre-processor:'):
+                on_cpp_line = True
 
         # Parse package info
         packages = parse_packages(cabal_out)
@@ -376,6 +426,10 @@ class Init(Mode):
         
         for ll in build_data.llvm_files:
             destfile = os.path.join(dir, build_data.local_name(ll))
+            if not os.path.exists(ll):
+                Log.error('Source ll file %s does not exist', ll)
+                raise ModeError('Source ll file does not exist: '+ll)
+
             Log.verbose('  %s => %s', ll, destfile)
             shutil.move(ll, destfile)
 
@@ -490,7 +544,11 @@ class Makefile(Mode):
 
         header("Default Target")
         m_trace = build("$(M)")
-        outh.write("default: prep "+m_trace+"\n")
+        outh.write("default: build\n")
+        outh.write("\t\n")
+        outh.write("\n")
+
+        outh.write("build: prep "+m_trace+"\n")
         outh.write("\t\n")
         outh.write("\n")
         
@@ -561,6 +619,7 @@ class Makefile(Mode):
 
         outh.write("clean:\n")
         outh.write("\trm -rf "+build("")+"\n")
+        outh.write("\trm -f $(LLVM_PROF_OUT)\n")
         outh.write("\n")
         
         header("Automatic Targets")
@@ -604,7 +663,7 @@ def parse_args(args):
     return parser.parse_args(args)
 
 def test(out=sys.stdout):
-    site_cfg = os.path.join('/Users/dave/local/bin', 'htrace.site.cfg')
+    site_cfg = os.path.join(os.environ['HOME'], 'local/bin', 'htrace.site.cfg')
     cfg = Config(site_cfg)
     makefile = Makefile(cfg)
     makefile.build_data = ProgramBuildData.from_cfg_file('htrace.build.cfg')
