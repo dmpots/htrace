@@ -420,6 +420,9 @@ class Init(Mode):
         build_data = ProgramBuildData.from_ghc_output(res.stderr, res.stdout)
         if args.extra_libs:
             build_data.libs.extend(args.extra_libs.split())
+        if args.extra_ll_files:
+            build_data.extern_llvm_files.extend(args.extra_ll_files.split())
+
         Log.debug("BD: "+str(build_data))
 
         # Create output directory if needed
@@ -690,6 +693,8 @@ def parse_args(args):
                              help='arguments passed to cabal build')
     parser_prep.add_argument('--extra-libs', metavar="LIBS",
                              help='extra libraries to link against')
+    parser_prep.add_argument('--extra-ll-files', metavar="FILES",
+                             help='extra llvm bitcode files for build data with')
     parser_prep.set_defaults(mode=Init)
 
     parser_makefile = subparsers.add_parser(Makefile().name,
