@@ -4,6 +4,7 @@ import configparser
 import logging
 import math
 import os
+import re
 import subprocess
 import sys
 import shutil
@@ -281,7 +282,13 @@ class ProgramBuildData:
                     for (i, arg) in enumerate(args):
                         if arg == "-package-id":
                             p = args[i+1]
-                            p = p[:p.index('-')]
+                            # search for a -digit to get the whole package name
+                            m = re.search(r'-\d', p)
+                            if m:
+                                p = p[:m.start()]
+                            else:
+                                # fallback to the first dash
+                                p = p[:p.index('-')]
                             Log.debug("Adding build package: "+p)
                             packages.append(p)
             return packages
