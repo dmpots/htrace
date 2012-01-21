@@ -1,5 +1,12 @@
+CLANG:=$(HOME)/llvm/bin/clang
+HSMAIN_LL:=../static_files/HsMain.ll
 
+default: $(HSMAIN_LL)
 
+$(HSMAIN_LL):
+	$(CLANG)  -S -Xclang -triple="x86_64-apple-darwin10.0.0" -emit-llvm HsMain.c -o $@
+	./munge.py $@
 
-hsmain:
-	$(HOME)/llvm/bin/clang -emit-llvm -c -o - -S HsMain.c -o ../static_files/HsMain.ll
+clean:
+	rm -f $(HSMAIN_LL)
+
