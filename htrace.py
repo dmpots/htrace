@@ -121,13 +121,15 @@ class Command:
 
 class ProgramBuildData:
     def __init__(self, target="",
-                 llvm_files=[], libdirs=[], libs=[], extern_llvm_files=[],packages=[]):
+                 llvm_files=[], libdirs=[], libs=[], extern_llvm_files=[],packages=[],
+                 opt_pre_link=[]):
         self.target = target
         self.llvm_files = llvm_files
         self.libdirs    = libdirs
         self.libs       = libs
         self.extern_llvm_files = extern_llvm_files
         self.packages   = packages
+        self.opt_pre_link = ['-mem2reg'] + opt_pre_link
 
     def write(self, out):
         def list_to_str(name, lst):
@@ -147,7 +149,8 @@ class ProgramBuildData:
                      ('libs', list_to_str('libs', self.libs)),
                      ('libdirs', list_to_str('libdirs', self.libdirs)),
                      ('extern_llvm_files', list_to_str('extern_llvm_files', self.extern_llvm_files)),
-                     ('packages', list_to_str('packages', self.packages))
+                     ('packages', list_to_str('packages', self.packages)),
+                     ('opt_pre_link', list_to_str('opt_pre_link', self.opt_pre_link)),
                      ])
                 )
             ]
@@ -247,7 +250,8 @@ class ProgramBuildData:
             libs=make_list(build_cfg['libs']),
             libdirs=make_list(build_cfg['libdirs']),
             extern_llvm_files=make_list(build_cfg['extern_llvm_files']),
-            packages=make_list(build_cfg['packages']))
+            packages=make_list(build_cfg['packages']),
+            opt_pre_link=make_list(build_cfg['opt_pre_link']),)
 
                 
     @staticmethod
@@ -429,6 +433,8 @@ class Init(Mode):
             build_data.libs.extend(args.extra_libs.split())
         if args.extra_ll_files:
             build_data.extern_llvm_files.extend(args.extra_ll_files.split())
+        if args.extra_opt_pre_link:
+            build_data.opt_pre_link.extend(args.extra_opt_pre_link.split())
 
         Log.debug("BD: "+str(build_data))
 
@@ -580,6 +586,7 @@ class Makefile(Mode):
         header("Trace Parameters")
         outh.write("LLVM_PROF_OUT  := llvmprof.out\n")
         outh.write("OPT_POST_TRACE := -O2\n")
+        outh.write("OPT_PRE_LINK   := "+' '.join(build_data.opt_pre_link)+"\n")
         outh.write('\n')
 
         header("Program Arguments")
@@ -669,7 +676,7 @@ class Makefile(Mode):
         header("Automatic Targets")
         bitcode_pattern = os.path.join(build_data.bitcode_dir(), "%.ll\n")
         outh.write(build("%", ".mem2reg.ll") + ": " + bitcode_pattern)
-        outh.write("\t$(LLVM_OPT) -mem2reg -S $< -o $@\n\n")
+        outh.write("\t$(LLVM_OPT) $(OPT_PRE_LINK) -S $< -o $@\n\n")
 
         outh.write("%.bc: %.ll\n")
         outh.write("\t$(LLVM_OPT) $< -o $@\n")
@@ -702,6 +709,8 @@ def parse_args(args):
                              help='extra libraries to link against')
     parser_prep.add_argument('--extra-ll-files', metavar="FILES",
                              help='extra llvm bitcode files for build data with')
+    parser_prep.add_argument('--extra-opt-pre-link', metavar='LLVM_OPTS',
+                             help='extra optimizations to run before llvm-link')
     parser_prep.set_defaults(mode=Init)
 
     parser_makefile = subparsers.add_parser(Makefile().name,
