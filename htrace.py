@@ -79,6 +79,7 @@ class LLVM:
         self.opt = dict['opt']
         self.llvm_prof = dict['llvm-prof']
         self.llvm_link = dict['llvm-link']
+        self.llvm_dis  = dict['llvm-dis']
 
 class ModeError(Exception):
     def __init__(self, msg):
@@ -555,6 +556,7 @@ class Makefile(Mode):
         outh.write('LLVM_LINK := '+llvm.llvm_link+'\n')
         outh.write('LLVM_PROF := '+llvm.llvm_prof+'\n')
         outh.write('LLVM_LLC  := '+llvm.llc+'\n')
+        outh.write('LLVM_DIS  := '+llvm.llvm_dis+'\n')
         outh.write('\n')
 
         header("GHC")
@@ -668,6 +670,22 @@ class Makefile(Mode):
         header("Run Trace")
         outh.write("run: prep "+m_trace+"\n")
         outh.write("\t"+m_trace+" $(PROG_ARGS)\n")
+        outh.write("\n")
+
+        header("View LL Files")
+        outh.write("EDITOR=aquamacs\n")
+        m_trace_ll = build(m_trace_bc, ".ll")
+        outh.write(m_trace_ll+": "+m_trace_bc+"\n")
+        outh.write("\t$(LLVM_DIS) $<\n")
+        outh.write("view-profed.ll: "+m_trace_ll+"\n")
+        outh.write("\t$(EDITOR) $<\n")
+        outh.write("\n")
+
+        m_traced_opt_ll = build(m_traced_opt_bc, '.ll')
+        outh.write(m_traced_opt_ll+": "+m_traced_opt_bc+"\n")
+        outh.write("\t$(LLVM_DIS) $<\n")
+        outh.write("view-traced.ll: "+m_traced_opt_ll+"\n")
+        outh.write("\t$(EDITOR) $<\n")
         outh.write("\n")
 
         header("Helper Targets")
