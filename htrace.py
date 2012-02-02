@@ -129,7 +129,7 @@ class ProgramBuildData:
         self.libs       = libs
         self.extern_llvm_files = extern_llvm_files
         self.packages   = packages
-        self.opt_pre_link = ['-mem2reg'] + opt_pre_link
+        self.opt_pre_link = opt_pre_link
 
     def write(self, out):
         def list_to_str(name, lst):
