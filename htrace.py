@@ -579,8 +579,12 @@ class Makefile(Mode):
         ex_ll_files = map(build_data.local_name, build_data.extern_llvm_files)
         all_ll_files = list(hs_ll_files) + list(ex_ll_files)
         m2r_ll_files = map(lambda x: build(x, ".opt-pre-link.ll"), all_ll_files)
-        outh.write("ALL_LL_FILES          := "+" ".join(all_ll_files)+'\n\n')
-        outh.write("PRE_LINK_LL_FILES     := "+" ".join(m2r_ll_files)+'\n')
+        outh.write("ALL_LL_FILES      := "+
+                   "$(wildcard bitcode/*.ll)\n")
+        outh.write("BUILD_LL_FILES    := "+
+                   "$(addprefix build/, $(notdir $(ALL_LL_FILES)))\n")
+        outh.write("PRE_LINK_LL_FILES := "+
+                   "$(addsuffix .opt-pre-link.ll, $(basename $(BUILD_LL_FILES)))\n")
         outh.write('\n')
 
         header("Trace Parameters")
