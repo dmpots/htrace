@@ -578,14 +578,15 @@ class Makefile(Mode):
         hs_ll_files = map(build_data.local_name, build_data.llvm_files)
         ex_ll_files = map(build_data.local_name, build_data.extern_llvm_files)
         all_ll_files = list(hs_ll_files) + list(ex_ll_files)
-        m2r_ll_files = map(lambda x: build(x, ".mem2reg.ll"), all_ll_files)
-        outh.write("ALL_LL_FILES     := "+" ".join(all_ll_files)+'\n\n')
-        outh.write("M2R_LL_FILES     := "+" ".join(m2r_ll_files)+'\n')
+        m2r_ll_files = map(lambda x: build(x, ".opt-pre-link.ll"), all_ll_files)
+        outh.write("ALL_LL_FILES          := "+" ".join(all_ll_files)+'\n\n')
+        outh.write("PRE_LINK_LL_FILES     := "+" ".join(m2r_ll_files)+'\n')
         outh.write('\n')
 
         header("Trace Parameters")
-        outh.write("LLVM_PROF_OUT  := llvmprof.out\n")
+        outh.write("LLVM_TRACE_PROF_OUT  := llvm-trace-prof.out\n")
         outh.write("OPT_POST_TRACE := -O2\n")
+        outh.write("LLC_POST_TRACE := $(OPT_POST_TRACE)\n")
         outh.write("OPT_PRE_LINK   := "+' '.join(build_data.opt_pre_link)+"\n")
         outh.write('\n')
 
@@ -606,7 +607,7 @@ class Makefile(Mode):
         header("Link LL files")
         m_linked = build("$(M).linked.ll")
         m_linked_bc = build(m_linked, ".bc")
-        outh.write(m_linked + ": $(M2R_LL_FILES)\n")
+        outh.write(m_linked + ": $(PRE_LINK_LL_FILES)\n")
         outh.write("\t$(LLVM_LINK) $^ -S -o $@\n")
         outh.write("\n")
 
@@ -616,30 +617,32 @@ class Makefile(Mode):
         outh.write("\n")
 
         header("Trace Profiling")
-        m_trace_bc = build("$(M).linked.ll", ".trace.bc")
+        m_trace_bc = build("$(M).linked.ll", ".prof-trace.bc")
         outh.write(m_trace_bc + ": "+m_linked_bc+"\n")
         outh.write("\t$(LLVM_OPT) -insert-trace-profiling -stats $< -o $@\n\n")
 
         
-        outh.write("trace $(LLVM_PROF_OUT): "+m_trace_bc+"\n")
+        outh.write("trace $(LLVM_TRACE_PROF_OUT): "+m_trace_bc+"\n")
         outh.write("\t$(LLI_ENV) $(LLVM_LLI) \\\n\t\t"+
                    "-load=$(LLVM_LIB)/libtrace_rt.dylib \\\n\t\t"+
                    "-use-ifcprofile-listener \\\n\t\t"+
                    "$< \\\n\t\t"+
-                   "-llvmprof-output $(LLVM_PROF_OUT) \\\n\t\t"+
+                   "-llvmprof-output $(LLVM_TRACE_PROF_OUT) \\\n\t\t"+
                    "$(PROG_ARGS)\n\n")
 
-        outh.write("view-trace: $(LLVM_PROF_OUT)\n")
-        outh.write("\t$(LLVM_PROF) -stats -profile-type=trace "
-                   +m_linked_bc+" $(LLVM_PROF_OUT)\n")        
+        outh.write("view-trace: $(LLVM_TRACE_PROF_OUT)\n")
+        outh.write("\t$(LLVM_PROF) -stats -profile-type=trace "+
+                   m_linked_bc+
+                   " $(LLVM_TRACE_PROF_OUT)"+
+                   " -trace-profile-loader-file=$(LLVM_TRACE_PROF_OUT)\n")        
         outh.write("\n")
 
         header("Trace Optimization")
         m_traced = build(m_linked_bc, '.traced.ll')
-        outh.write(m_traced + ": " + m_linked_bc+" $(LLVM_PROF_OUT)\n")
+        outh.write(m_traced + ": " + m_linked_bc+" $(LLVM_TRACE_PROF_OUT)\n")
         outh.write("\t$(LLVM_OPT) $< -stats \\\n\t\t"+
                    "-load-trace-profile \\\n\t\t"+
-                   "-trace-profile-loader-file=$(LLVM_PROF_OUT) \\\n\t\t"+
+                   "-trace-profile-loader-file=$(LLVM_TRACE_PROF_OUT) \\\n\t\t"+
                    "-build-traces \\\n\t\t"+
                    "-S \\\n\t\t"+
                    "-o $@\n\n")
@@ -651,7 +654,7 @@ class Makefile(Mode):
 
         m_traced_opt_s = build(m_traced_opt_bc, '.s')
         outh.write(m_traced_opt_s+": "+m_traced_opt_bc+"\n")
-        outh.write("\t$(LLVM_LLC) $(OPT_POST_TRACE) -disable-cfi $< -o $@\n")
+        outh.write("\t$(LLVM_LLC) $(LLC_POST_TRACE) -disable-cfi $< -o $@\n")
         outh.write("\n")
 
         outh.write(m_trace+": "+m_traced_opt_s+"\n")
@@ -670,12 +673,12 @@ class Makefile(Mode):
 
         outh.write("clean:\n")
         outh.write("\trm -rf "+build("")+"\n")
-        outh.write("\trm -f $(LLVM_PROF_OUT)\n")
+        outh.write("\trm -f $(LLVM_TRACE_PROF_OUT)\n")
         outh.write("\n")
         
         header("Automatic Targets")
         bitcode_pattern = os.path.join(build_data.bitcode_dir(), "%.ll\n")
-        outh.write(build("%", ".mem2reg.ll") + ": " + bitcode_pattern)
+        outh.write(build("%", ".opt-pre-link.ll") + ": " + bitcode_pattern)
         outh.write("\t$(LLVM_OPT) $(OPT_PRE_LINK) -S $< -o $@\n\n")
 
         outh.write("%.bc: %.ll\n")
