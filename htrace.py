@@ -10,6 +10,7 @@ import sys
 import shutil
 import tempfile
 from collections import OrderedDict
+import platform
 
 DEFAULT_GHC='/Users/dave/Research/git/ghc-trace/inplace/bin/ghc-stage2'
 
@@ -224,7 +225,10 @@ class ProgramBuildData:
 
     def dylib(self, lib):
        """Form dynamic library name with proper extension and lib prefix"""
-       return 'lib'+lib+'.dylib'
+       ext = 'so'
+       if platform.platform().startswith('Darwin'):
+           ext = 'dylib'
+       return 'lib'+lib+'.'+ext
 
     def __repr__(self):
         return "ProgramBuildData("+",".join([repr(self.target),
@@ -635,7 +639,7 @@ class Makefile(Mode):
         
         outh.write("trace $(LLVM_TRACE_PROF_OUT): "+m_trace_bc+"\n")
         outh.write("\t$(LLI_ENV) $(LLVM_LLI) \\\n\t\t"+
-                   "-load=$(LLVM_LIB)/libtrace_rt.dylib \\\n\t\t"+
+                   "-load=$(LLVM_LIB)/"+build_data.dylib('trace_rt')+" \\\n\t\t"+
                    "-use-ifcprofile-listener \\\n\t\t"+
                    "$< \\\n\t\t"+
                    "-llvmprof-output $(LLVM_TRACE_PROF_OUT) \\\n\t\t"+
