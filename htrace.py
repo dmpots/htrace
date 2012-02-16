@@ -594,6 +594,7 @@ class Makefile(Mode):
         outh.write("OPT_POST_TRACE := -O2\n")
         outh.write("LLC_POST_TRACE := $(OPT_POST_TRACE)\n")
         outh.write("OPT_PRE_LINK   := "+' '.join(build_data.opt_pre_link)+"\n")
+        outh.write("BREAK_ON_INTRINSIC := false\n")
         outh.write('\n')
 
         header("Program Arguments")
@@ -625,7 +626,11 @@ class Makefile(Mode):
         header("Trace Profiling")
         m_trace_bc = build("$(M).linked.ll", ".prof-trace.bc")
         outh.write(m_trace_bc + ": "+m_linked_bc+"\n")
-        outh.write("\t$(LLVM_OPT) -insert-trace-profiling -stats $< -o $@\n\n")
+        outh.write("\t$(LLVM_OPT) -insert-trace-profiling \\\n\t\t"+
+                   "-stats \\\n\t\t"+
+                   "-break-trace-on-intrinsic=$(BREAK_ON_INTRINSIC) \\\n\t\t"+
+                   "$< \\\n\t\t"+
+                   "-o $@\n\n")
 
         
         outh.write("trace $(LLVM_TRACE_PROF_OUT): "+m_trace_bc+"\n")
