@@ -599,6 +599,9 @@ class Makefile(Mode):
         outh.write("LLC_POST_TRACE := $(OPT_POST_TRACE)\n")
         outh.write("OPT_PRE_LINK   := "+' '.join(build_data.opt_pre_link)+"\n")
         outh.write("BREAK_ON_INTRINSIC := false\n")
+        outh.write("PROF_SHADOW        := -llvmprof-shadow\n")
+        outh.write("TRACE_COMPLETION_CUTOFF := 0.0\n")
+        outh.write("HOTNESS_THRESHOLD := 100000\n")
         outh.write('\n')
 
         header("Program Arguments")
@@ -643,14 +646,19 @@ class Makefile(Mode):
                    "-use-ifcprofile-listener \\\n\t\t"+
                    "$< \\\n\t\t"+
                    "-llvmprof-output $(LLVM_TRACE_PROF_OUT) \\\n\t\t"+
+                   "-llvmprof-hotness $(HOTNESS_THRESHOLD) \\\n\t\t"+
+                   "$(PROF_SHADOW) \\\n\t\t"+
                    "$(PROG_ARGS)\n\n")
 
-        outh.write("view-trace: $(LLVM_TRACE_PROF_OUT)\n")
+        outh.write("view-trace.txt: $(LLVM_TRACE_PROF_OUT)\n")
         outh.write("\t$(LLVM_PROF) -stats -profile-type=trace "+
                    m_linked_bc+
                    " $(LLVM_TRACE_PROF_OUT)"+
-                   " -trace-profile-loader-file=$(LLVM_TRACE_PROF_OUT)\n")        
+                   " -trace-profile-loader-file=$(LLVM_TRACE_PROF_OUT) > $@\n")        
         outh.write("\n")
+
+        outh.write("view-trace: view-trace.txt\n\t")
+        outh.write("cat $<\n")
 
         header("Trace Optimization")
         m_traced = build(m_linked_bc, '.traced.ll')
@@ -659,6 +667,7 @@ class Makefile(Mode):
                    "-load-trace-profile \\\n\t\t"+
                    "-trace-profile-loader-file=$(LLVM_TRACE_PROF_OUT) \\\n\t\t"+
                    "-build-traces \\\n\t\t"+
+                   "-trace-completion-cutoff $(TRACE_COMPLETION_CUTOFF) \\\n\t\t"+
                    "-S \\\n\t\t"+
                    "-o $@\n\n")
 
