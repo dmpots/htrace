@@ -713,7 +713,7 @@ class Makefile(Mode):
 
         outh.write("clean:\n")
         outh.write("\trm -rf "+build("")+"\n")
-        outh.write("\trm -f $(LLVM_TRACE_PROF_OUT)\n")
+        outh.write("\trm -f $(LLVM_TRACE_PROF_OUT) view-trace.txt\n")
         outh.write("\n")
         
         header("Automatic Targets")
